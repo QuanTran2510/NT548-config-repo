@@ -1,0 +1,34 @@
+# Defaults only. Real values come from two files merged by ArgoCD:
+#   apps/<service>/values.yaml   (owned by CI / developers: image, port, resources)
+#   envs/<service>-<site>/values.yaml (owned by the optimiser: replicaCount, nodeSelector)
+service: ""            # set by envs/*/values.yaml
+site: ""               # set by envs/*/values.yaml
+
+replicaCount: 1
+
+image:
+  repository: ""       # required
+  tag: ""              # required, must not be "latest"
+  pullPolicy: IfNotPresent
+
+containerPort: 8080
+servicePort: 80
+
+# Guardrail friendly defaults: always set requests AND limits (nodes only have 2 GB RAM).
+resources:
+  requests: {cpu: 25m, memory: 32Mi}
+  limits: {cpu: 100m, memory: 64Mi}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+probes:
+  path: /
+  initialDelaySeconds: 3
+
+nodeSelector: {}
+podLabels: {}

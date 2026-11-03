@@ -1,0 +1,5 @@
+# Owned by CI / developers. CI updates image.tag after every successful build.
+image:
+  repository: docker.io/nginxinc/nginx-unprivileged   # placeholder until the real service image exists
+  tag: "1.27-alpine"
+containerPort: 8080
