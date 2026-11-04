@@ -10,7 +10,7 @@ spec:
   goTemplateOptions: ["missingkey=error"]
   generators:
     - git:
-        repoURL: https://github.com/YOUR_USER/config-repo.git   # TODO: change
+        repoURL: https://github.com/QuanTran2510/NT548-config-repo.git  # TODO: change
         revision: main
         files:
           - path: "envs/*/values.yaml"
@@ -23,7 +23,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/YOUR_USER/config-repo.git   # TODO: change
+        repoURL: https://github.com/QuanTran2510/NT548-config-repo.git   # TODO: change
         targetRevision: main
         path: charts/service
         helm:
