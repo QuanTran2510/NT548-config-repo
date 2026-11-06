@@ -1,0 +1,5 @@
+# cp backend.hcl.example backend.hcl   (git-ignored)   then:  terraform init -backend-config=backend.hcl
+bucket       = "platform-tfstate-<ACCOUNT_ID>"   # printed by bootstrap-state.sh
+key          = "platform/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true

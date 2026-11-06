@@ -1,0 +1,15 @@
+- name: Base setup on every node
+  hosts: all
+  roles: [common]
+
+- name: k3s server (control plane)
+  hosts: server
+  roles: [k3s_server]
+
+- name: k3s agents join the server
+  hosts: agents
+  roles: [k3s_agent]
+
+- name: Platform basics (Helm, region labels, namespaces + quotas)
+  hosts: server
+  roles: [platform]

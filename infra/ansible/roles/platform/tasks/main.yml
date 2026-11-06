@@ -1,0 +1,34 @@
+- name: Install Helm
+  ansible.builtin.shell: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm
+
+- name: Wait until every node has joined and is Ready
+  ansible.builtin.shell: |
+    test "$(k3s kubectl get nodes --no-headers | wc -l)" -eq {{ groups['all'] | length }} \
+    && k3s kubectl wait --for=condition=Ready node --all --timeout=20s
+  register: all_ready
+  retries: 18
+  delay: 10
+  until: all_ready.rc == 0
+  changed_when: false
+
+# node-label in config.yaml is applied only at first registration; this keeps labels correct later too.
+- name: Label nodes with their simulated region
+  ansible.builtin.command: >
+    k3s kubectl label node {{ hostvars[item].ansible_facts.hostname }}
+    region={{ hostvars[item].site }} --overwrite
+  loop: "{{ groups['all'] }}"
+  register: label
+  changed_when: "'not labeled' not in label.stdout"
+
+- name: Render namespaces, quotas and limit ranges
+  ansible.builtin.template:
+    src: namespaces.yaml.j2
+    dest: /tmp/platform-namespaces.yaml
+    mode: "0644"
+
+- name: Apply namespaces, quotas and limit ranges
+  ansible.builtin.command: k3s kubectl apply -f /tmp/platform-namespaces.yaml
+  register: applied
+  changed_when: "'created' in applied.stdout or 'configured' in applied.stdout"

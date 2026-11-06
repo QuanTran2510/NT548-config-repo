@@ -1,0 +1,153 @@
+name: terraform
+
+# PR   -> terraform plan, posted as a comment (nothing is created)
+# merge -> terraform apply (creates / removes nodes)
+# Needs (repo Settings -> Secrets and variables -> Actions):
+#   secrets:   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN   (Learner Lab: refresh every session)
+#   variables: TF_STATE_BUCKET, ADMIN_CIDR (YOUR_IP/32), TF_VERSION (same as `terraform version` locally)
+
+on:
+  pull_request:
+    paths: ["infra/terraform/**"]
+  push:
+    branches: [main]
+    paths: ["infra/terraform/**"]
+  workflow_dispatch:
+    inputs:
+      allow_destroy:
+        description: "Allow removing nodes (drain them with kubectl first!)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform          # one run at a time: they share one state file
+  cancel-in-progress: false
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+  AWS_DEFAULT_REGION: us-east-1
+  TF_VAR_admin_cidr: ${{ vars.ADMIN_CIDR }}
+  TF_IN_AUTOMATION: "true"
+
+defaults:
+  run:
+    working-directory: infra/terraform
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check credentials and settings
+        run: |
+          test -n "$AWS_ACCESS_KEY_ID" || { echo "Missing AWS_* secrets. Learner Lab credentials expire: paste a fresh set."; exit 1; }
+          test -n "${{ vars.TF_STATE_BUCKET }}" || { echo "Missing variable TF_STATE_BUCKET"; exit 1; }
+          test -n "$TF_VAR_admin_cidr" || { echo "Missing variable ADMIN_CIDR (YOUR_IP/32)"; exit 1; }
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TF_VERSION || '1.13.0' }}
+          terraform_wrapper: false
+
+      - name: Init
+        run: >
+          terraform init -input=false
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          -backend-config="key=platform/terraform.tfstate"
+          -backend-config="region=us-east-1"
+          -backend-config="use_lockfile=true"
+
+      - run: terraform validate
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -out=tfplan | tee plan.txt
+
+      - name: Count additions and removals
+        run: |
+          terraform show -json tfplan > plan.json
+          ADDS=$(jq '[.resource_changes[]? | select(.type=="aws_instance") | select(.change.actions | index("create"))] | length' plan.json)
+          DELS=$(jq '[.resource_changes[]? | select(.type=="aws_instance") | select(.change.actions | index("delete"))] | length' plan.json)
+          echo "ADDS=$ADDS" >> "$GITHUB_ENV"
+          echo "DELS=$DELS" >> "$GITHUB_ENV"
+
+      - name: Comment the plan on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- terraform-plan -->';
+            let plan = fs.readFileSync('infra/terraform/plan.txt', 'utf8');
+            if (plan.length > 60000) plan = '... (truncated) ...\n' + plan.slice(-60000);
+            const adds = process.env.ADDS, dels = process.env.DELS;
+            const warn = Number(dels) > 0
+              ? `\n> **WARNING: this plan removes ${dels} machine(s).** Run \`kubectl drain\` on them BEFORE merging.\n`
+              : '';
+            const body = `${marker}\n### Terraform plan\n\nEC2 to create: **${adds}**, to remove: **${dels}**.\n${warn}\n<details><summary>Full plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>\n\nMerging this PR runs \`terraform apply\`. Afterwards run \`ansible/join-new-nodes.sh\`.`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const old = comments.find(c => c.body && c.body.includes(marker));
+            if (old) await github.rest.issues.updateComment({ owner, repo, comment_id: old.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+  apply:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check credentials and settings
+        run: |
+          test -n "$AWS_ACCESS_KEY_ID" || { echo "Missing AWS_* secrets. Learner Lab credentials expire: paste a fresh set, then re-run this job."; exit 1; }
+          test -n "${{ vars.TF_STATE_BUCKET }}" || { echo "Missing variable TF_STATE_BUCKET"; exit 1; }
+          test -n "$TF_VAR_admin_cidr" || { echo "Missing variable ADMIN_CIDR (YOUR_IP/32)"; exit 1; }
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TF_VERSION || '1.13.0' }}
+          terraform_wrapper: false
+
+      - name: Init
+        run: >
+          terraform init -input=false
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          -backend-config="key=platform/terraform.tfstate"
+          -backend-config="region=us-east-1"
+          -backend-config="use_lockfile=true"
+
+      - run: terraform validate
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -out=tfplan
+
+      - name: Guard - never remove machines automatically
+        run: |
+          terraform show -json tfplan > plan.json
+          DELS=$(jq '[.resource_changes[]? | select(.type=="aws_instance") | select(.change.actions | index("delete"))] | length' plan.json)
+          echo "machines to remove: $DELS"
+          if [ "$DELS" -gt 0 ] && [ "${{ inputs.allow_destroy }}" != "true" ]; then
+            echo "Refusing: the plan removes $DELS machine(s). Drain the nodes (kubectl drain ... && kubectl delete node ...)"
+            echo "then run this workflow manually (Run workflow) with allow_destroy = true."
+            exit 1
+          fi
+
+      - name: Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Summary
+        run: |
+          {
+            echo "### Nodes after apply"
+            echo '```'
+            terraform output -json nodes | jq -r 'to_entries[] | "\(.key)\t\(.value)"'
+            echo '```'
+            echo "Next, on your machine: \`ansible/join-new-nodes.sh\` (installs k3s on new nodes)."
+          } >> "$GITHUB_STEP_SUMMARY"
