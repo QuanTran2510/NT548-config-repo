@@ -1,0 +1,41 @@
+- name: Install base packages
+  ansible.builtin.apt:
+    name: [curl, ca-certificates]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create swap file
+  ansible.builtin.command: fallocate -l {{ swap_size }} /swapfile
+  args:
+    creates: /swapfile
+
+- name: Restrict swap file permissions
+  ansible.builtin.file:
+    path: /swapfile
+    mode: "0600"
+
+- name: Check whether swap is active
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: swap_active
+  changed_when: false
+
+- name: Format and enable swap
+  ansible.builtin.shell: mkswap /swapfile && swapon /swapfile
+  when: "'/swapfile' not in swap_active.stdout"
+
+- name: Keep swap across reboots
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: /swapfile none swap sw 0 0
+
+- name: Prefer RAM over swap
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-swappiness.conf
+    content: "vm.swappiness=10\n"
+    mode: "0644"
+  register: swappiness
+
+- name: Apply swappiness now
+  ansible.builtin.command: sysctl -w vm.swappiness=10
+  when: swappiness.changed

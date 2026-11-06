@@ -1,0 +1,11 @@
+token: "{{ k3s_token }}"
+tls-san:
+  - "{{ ansible_host }}"
+  - "{{ private_ip }}"
+node-label:
+  - "region={{ site }}"
+disable:
+  - traefik                     # saves RAM; services are reached via NodePort
+write-kubeconfig-mode: "0644"
+kubelet-arg:
+  - "fail-swap-on=false"        # kubelet refuses to start with swap on otherwise

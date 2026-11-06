@@ -1,0 +1,15 @@
+k3s_channel: v1.30          # newest 1.30.x; pin an exact version later if you need reproducibility
+swap_size: 2G               # nodes have only 2 GB RAM
+# Generated on first run, kept in ansible/credentials/ (git-ignored), reused afterwards.
+k3s_token: "{{ lookup('password', playbook_dir + '/credentials/k3s_token chars=ascii_letters,digits length=40') }}"
+
+platform_namespaces:        # one per service; ArgoCD deploys into these
+  - realtime-chat
+  - web-api
+  - analytics
+namespace_quota:            # per service namespace; sized for the "peak" scenario (~15 pods of one service)
+  pods: "40"
+  requests_cpu: "2"
+  requests_memory: 4Gi
+  limits_cpu: "4"
+  limits_memory: 4Gi

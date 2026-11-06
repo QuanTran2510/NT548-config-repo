@@ -1,0 +1,6 @@
+server: "https://{{ hostvars[groups['server'][0]].private_ip }}:6443"
+token: "{{ k3s_token }}"
+node-label:
+  - "region={{ site }}"
+kubelet-arg:
+  - "fail-swap-on=false"

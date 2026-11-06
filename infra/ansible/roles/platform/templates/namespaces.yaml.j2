@@ -1,0 +1,31 @@
+{% for ns in platform_namespaces %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ ns }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: quota
+  namespace: {{ ns }}
+spec:
+  hard:
+    pods: "{{ namespace_quota.pods }}"
+    requests.cpu: "{{ namespace_quota.requests_cpu }}"
+    requests.memory: {{ namespace_quota.requests_memory }}
+    limits.cpu: "{{ namespace_quota.limits_cpu }}"
+    limits.memory: {{ namespace_quota.limits_memory }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: defaults
+  namespace: {{ ns }}
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 25m, memory: 32Mi}
+      default: {cpu: 100m, memory: 64Mi}
+{% endfor %}

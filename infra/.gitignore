@@ -1,0 +1,10 @@
+.terraform/
+*.tfstate*
+terraform.tfvars
+backend.hcl
+tfplan
+plan.txt
+ansible/inventory.ini
+ansible/kubeconfig
+ansible/credentials/
+*.pem
