@@ -2,8 +2,14 @@
 service: analytics
 site: ap-southeast
 solver: ilp
-replicaCount: 3
+scenario: asia-launch
+replicaCount: 2
 nodeSelector:
   region: ap-southeast
 podLabels:
   placement/site: ap-southeast
+resources:
+  requests:
+    memory: 256Mi
+  limits:
+    memory: 256Mi

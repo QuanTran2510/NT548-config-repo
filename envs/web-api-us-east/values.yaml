@@ -2,8 +2,14 @@
 service: web-api
 site: us-east
 solver: ilp
-replicaCount: 2
+scenario: asia-launch
+replicaCount: 1
 nodeSelector:
   region: us-east
 podLabels:
   placement/site: us-east
+resources:
+  requests:
+    memory: 192Mi
+  limits:
+    memory: 192Mi

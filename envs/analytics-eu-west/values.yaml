@@ -2,8 +2,14 @@
 service: analytics
 site: eu-west
 solver: ilp
+scenario: asia-launch
 replicaCount: 1
 nodeSelector:
   region: eu-west
 podLabels:
   placement/site: eu-west
+resources:
+  requests:
+    memory: 256Mi
+  limits:
+    memory: 256Mi
