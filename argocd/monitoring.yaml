@@ -1,0 +1,49 @@
+# Applied ONCE with kubectl (the ApplicationSet only watches envs/). After that ArgoCD keeps both in sync with Git.
+# Prerequisite: kubectl create namespace monitoring && kubectl -n monitoring create secret generic grafana-admin --from-literal=password=...
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus            # release name = "prometheus"  ->  Service "prometheus-server" (grafana's datasource URL)
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: prometheus
+      targetRevision: 29.14.0        # pinned; verify first: helm show chart prometheus-community/prometheus --version 29.14.0
+      helm:
+        valueFiles:
+          - $values/platform/monitoring/prometheus-values.yaml
+    - repoURL: https://github.com/QuanTran2510/NT548-config-repo.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/QuanTran2510/NT548-config-repo.git
+    targetRevision: main
+    path: platform/monitoring/grafana
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

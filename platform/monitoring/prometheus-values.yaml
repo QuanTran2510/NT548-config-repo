@@ -1,0 +1,53 @@
+# Lean Prometheus for 2 GB nodes. Prometheus, kube-state-metrics (and Grafana) are pinned to ap-southeast:
+# the placement model reserves that RAM there (reserved_mi in data.py). Keep the two in sync.
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+
+server:
+  global:
+    scrape_interval: 30s
+    evaluation_interval: 30s
+  retention: 2d
+  persistentVolume:
+    enabled: false              # data is lost when the pod restarts: fine for a demo, not for production
+  nodeSelector:
+    region: ap-southeast
+  resources:
+    requests: {cpu: 50m, memory: 200Mi}
+    limits: {memory: 450Mi}
+  service:
+    type: NodePort
+    nodePort: 30900             # http://<server public ip>:30900  (Security Group allows only your IP)
+
+kube-state-metrics:
+  nodeSelector:
+    region: ap-southeast
+  metricLabelsAllowlist:
+    - nodes=[region]            # exposes kube_node_labels{label_region=...} to group pods by simulated site
+  resources:
+    requests: {cpu: 10m, memory: 48Mi}
+    limits: {memory: 96Mi}
+
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 10m, memory: 24Mi}
+    limits: {memory: 48Mi}
+
+# The optimiser's own /metrics (placement_*). Service port is named "http" by the chart.
+extraScrapeConfigs: |
+  - job_name: placement-optimiser
+    metrics_path: /metrics
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names: [placement-optimiser]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        regex: http
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
