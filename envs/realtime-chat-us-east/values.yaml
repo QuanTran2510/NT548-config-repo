@@ -2,8 +2,14 @@
 service: realtime-chat
 site: us-east
 solver: ilp
+scenario: asia-launch
 replicaCount: 2
 nodeSelector:
   region: us-east
 podLabels:
   placement/site: us-east
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 128Mi

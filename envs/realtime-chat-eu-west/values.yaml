@@ -2,8 +2,14 @@
 service: realtime-chat
 site: eu-west
 solver: ilp
-replicaCount: 1
+scenario: asia-launch
+replicaCount: 2
 nodeSelector:
   region: eu-west
 podLabels:
   placement/site: eu-west
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 128Mi
