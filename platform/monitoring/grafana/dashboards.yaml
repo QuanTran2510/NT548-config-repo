@@ -13,7 +13,7 @@ data:
       ],
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "30s",
       "time": {
         "from": "now-3h",
@@ -467,7 +467,7 @@ data:
           "id": 10,
           "type": "timeseries",
           "title": "Node RAM really used",
-          "description": "node-exporter; instance is the node's private IP",
+          "description": "node-exporter, shown as site / node name",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -484,8 +484,8 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
-              "legendFormat": "{{instance}}",
+              "expr": "(label_replace(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes, \"internal_ip\", \"$1\", \"instance\", \"(.*):9100\") * on(internal_ip) group_left(node) kube_node_info) * on(node) group_left(label_region) kube_node_labels",
+              "legendFormat": "{{label_region}} / {{node}}",
               "refId": "A",
               "instant": false
             }
@@ -532,8 +532,8 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"memory\"})",
-              "legendFormat": "{{node}}",
+              "expr": "(sum by (node) (kube_pod_container_resource_requests{resource=\"memory\"})) * on(node) group_left(label_region) kube_node_labels",
+              "legendFormat": "{{label_region}} / {{node}}",
               "refId": "A",
               "instant": false
             }
@@ -562,6 +562,105 @@ data:
         {
           "id": 12,
           "type": "timeseries",
+          "title": "Node RAM used %",
+          "description": "Keep ap-southeast and us-east below about 85 %",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 28,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "(label_replace(100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes), \"internal_ip\", \"$1\", \"instance\", \"(.*):9100\") * on(internal_ip) group_left(node) kube_node_info) * on(node) group_left(label_region) kube_node_labels",
+              "legendFormat": "{{label_region}} / {{node}}",
+              "refId": "A",
+              "instant": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 0,
+              "max": 100,
+              "min": 0,
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "Pods per node (all namespaces)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 28,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "(count by (node) (kube_pod_info)) * on(node) group_left(label_region) kube_node_labels",
+              "legendFormat": "{{label_region}} / {{node}}",
+              "refId": "A",
+              "instant": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0,
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "id": 14,
+          "type": "timeseries",
           "title": "Optimiser runs",
           "description": "",
           "datasource": {
@@ -570,7 +669,7 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 28,
+            "y": 36,
             "w": 24,
             "h": 6
           },
