@@ -1,0 +1,8 @@
+# Hand-made on purpose: no GENERATED marker, so the optimiser's exporter never edits or deletes it.
+service: placement-optimiser
+site: eu-west
+replicaCount: 1
+nodeSelector:
+  region: eu-west
+podLabels:
+  placement/site: eu-west
