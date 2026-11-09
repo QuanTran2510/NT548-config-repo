@@ -25,11 +25,12 @@ blocked=0; warned=0; missed=0; failed_good=0
 printf '%-22s %-9s %s\n' "MANIFEST" "RESULT" "POLICY / MESSAGE"
 for f in bad-*.yaml; do
   out=$(kubectl apply --dry-run=server -f "$f" 2>&1); rc=$?
-  policy=$(echo "$out" | grep -o "guardrail-[a-z-]*" | head -1)
+  # name of the policy that spoke up ("ValidatingAdmissionPolicy 'guardrail-xxx'"), not any word that starts with guardrail-
+  policy=$(echo "$out" | grep -o "ValidatingAdmissionPolicy '[^']*'" | head -1 | cut -d"'" -f2)
   msg=$(echo "$out" | grep -oE "(denied request|binding '[a-z-]*'): .*" | head -1 | sed -E "s/^(denied request|binding '[a-z-]*'): //")
   if [ $rc -ne 0 ] && [ -n "$policy" ]; then r=BLOCKED; blocked=$((blocked + 1))
   elif [ $rc -eq 0 ] && [ -n "$policy" ]; then r=WARNED; warned=$((warned + 1))
-  else r=MISSED; missed=$((missed + 1)); msg="${out:0:100}"; fi
+  else r=ERROR; missed=$((missed + 1)); policy="-"; msg="not rejected by a policy: ${out:0:110}"; fi
   printf '%-22s %-9s %s: %s\n' "${f%.yaml}" "$r" "${policy:--}" "$msg"
 done
 for f in good-*.yaml; do
