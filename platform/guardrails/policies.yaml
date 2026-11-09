@@ -1,0 +1,200 @@
+# Cluster-wide rules, enforced only in namespaces labelled platform/guardrails=enforced (see bindings.yaml).
+# Pods are checked, and Deployments too so that a bad change fails at ArgoCD sync time with a clear message
+# instead of leaving a ReplicaSet that cannot create pods.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: guardrail-resource-limits
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+    description: Every container must declare CPU and memory requests AND limits (nodes only have 2 GB RAM).
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+    - apiGroups:
+      - apps
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+  variables:
+  - name: podSpec
+    expression: 'object.kind == ''Pod'' ? object.spec : object.spec.template.spec'
+  - name: containers
+    expression: 'variables.podSpec.containers + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])'
+  validations:
+  - expression: variables.containers.all(c, has(c.resources) && has(c.resources.limits) && 'cpu' in c.resources.limits && 'memory' in c.resources.limits)
+    message: every container must set resources.limits.cpu and resources.limits.memory
+  - expression: variables.containers.all(c, has(c.resources) && has(c.resources.requests) && 'cpu' in c.resources.requests && 'memory' in c.resources.requests)
+    message: every container must set resources.requests.cpu and resources.requests.memory
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: guardrail-image-tag
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+    description: Images must carry an explicit, non-latest tag (or a digest) so a deployment is reproducible and can be rolled back.
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+    - apiGroups:
+      - apps
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+  variables:
+  - name: podSpec
+    expression: 'object.kind == ''Pod'' ? object.spec : object.spec.template.spec'
+  - name: containers
+    expression: 'variables.podSpec.containers + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])'
+  validations:
+  - expression: variables.containers.all(c, c.image.contains('@') || c.image.lastIndexOf(':') > c.image.lastIndexOf('/'))
+    message: image must have an explicit tag or digest (no tag means latest)
+  - expression: variables.containers.all(c, !c.image.endsWith(':latest'))
+    message: image tag 'latest' is not allowed
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: guardrail-non-root
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+    description: Containers must not run as root.
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+    - apiGroups:
+      - apps
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+  variables:
+  - name: podSpec
+    expression: 'object.kind == ''Pod'' ? object.spec : object.spec.template.spec'
+  - name: containers
+    expression: 'variables.podSpec.containers + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])'
+  validations:
+  - expression: variables.containers.all(c, (has(c.securityContext) && has(c.securityContext.runAsNonRoot) && c.securityContext.runAsNonRoot == true) || (has(variables.podSpec.securityContext) && has(variables.podSpec.securityContext.runAsNonRoot) && variables.podSpec.securityContext.runAsNonRoot == true))
+    message: 'containers must set securityContext.runAsNonRoot: true'
+  - expression: variables.containers.all(c, !(has(c.securityContext) && has(c.securityContext.runAsUser) && c.securityContext.runAsUser == 0))
+    message: runAsUser 0 (root) is not allowed
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: guardrail-no-privileged
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+    description: No privileged containers and no host networking.
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+    - apiGroups:
+      - apps
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+  variables:
+  - name: podSpec
+    expression: 'object.kind == ''Pod'' ? object.spec : object.spec.template.spec'
+  - name: containers
+    expression: 'variables.podSpec.containers + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])'
+  validations:
+  - expression: variables.containers.all(c, !(has(c.securityContext) && has(c.securityContext.privileged) && c.securityContext.privileged == true))
+    message: privileged containers are not allowed
+  - expression: '!(has(variables.podSpec.hostNetwork) && variables.podSpec.hostNetwork == true)'
+    message: hostNetwork is not allowed
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: guardrail-image-registry
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+    description: Images may only come from trusted registries (supply-chain control). Edit the prefixes when you add a registry.
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+    - apiGroups:
+      - apps
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - deployments
+  variables:
+  - name: podSpec
+    expression: 'object.kind == ''Pod'' ? object.spec : object.spec.template.spec'
+  - name: containers
+    expression: 'variables.podSpec.containers + (has(variables.podSpec.initContainers) ? variables.podSpec.initContainers : [])'
+  validations:
+  - expression: variables.containers.all(c, c.image.startsWith('ghcr.io/quantran2510/') || c.image.startsWith('docker.io/nginxinc/'))
+    message: image must come from ghcr.io/quantran2510/ or docker.io/nginxinc/

@@ -1,0 +1,71 @@
+# validationActions: [Warn] = report violations but allow them (use this first).
+# Change every Warn to Deny to enforce:  sed -i 's/\[Warn\]/[Deny]/' platform/guardrails/bindings.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: guardrail-resource-limits
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  policyName: guardrail-resource-limits
+  validationActions: [Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/guardrails: enforced
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: guardrail-image-tag
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  policyName: guardrail-image-tag
+  validationActions: [Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/guardrails: enforced
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: guardrail-non-root
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  policyName: guardrail-non-root
+  validationActions: [Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/guardrails: enforced
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: guardrail-no-privileged
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  policyName: guardrail-no-privileged
+  validationActions: [Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/guardrails: enforced
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: guardrail-image-registry
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  policyName: guardrail-image-registry
+  validationActions: [Warn]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/guardrails: enforced

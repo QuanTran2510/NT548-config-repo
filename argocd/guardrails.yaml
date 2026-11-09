@@ -1,0 +1,19 @@
+# Applied ONCE with kubectl. Afterwards policies change only through Git (a pull request).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: guardrails
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/QuanTran2510/NT548-config-repo.git
+    targetRevision: main
+    path: platform/guardrails
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default          # the policies are cluster-scoped; the value is ignored
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
