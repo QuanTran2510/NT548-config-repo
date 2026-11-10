@@ -32,3 +32,6 @@ probes:
 
 nodeSelector: {}
 podLabels: {}
+
+# Extra environment variables (list of Kubernetes EnvVar). Used by the optimiser pod for the portal.
+env: []

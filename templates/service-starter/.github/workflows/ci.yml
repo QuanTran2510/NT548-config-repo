@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write          # the reusable workflow pushes the image to ghcr.io
+
+jobs:
+  ci:
+    uses: QuanTran2510/NT548-config-repo/.github/workflows/service-ci.yml@main
+    with:
+      service: CHANGE-ME                       # the name you register in the portal (a-z, 0-9, '-')
+      test_command: python -m unittest discover -s tests -v
+      port: 8080
+      health_path: /healthz
+    secrets:
+      CONFIG_REPO_TOKEN: ${{ secrets.CONFIG_REPO_TOKEN }}

@@ -1,0 +1,234 @@
+name: service-ci
+
+# Reusable "golden path" CI for a service repo. A service repo calls it with a few lines
+# (see templates/service-starter/.github/workflows/ci.yml). It: runs the service's tests, builds the image,
+# refuses a root image, smoke-tests it, scans it with Trivy, pushes it to GHCR and (on the default branch) writes
+# the new tag into apps/<service>/values.yaml of the config-repo, so ArgoCD rolls it out.
+#
+# The caller must grant:  permissions: {contents: read, packages: write}
+# and provide the secret CONFIG_REPO_TOKEN (fine-grained token: Contents read/write on the config-repo).
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Service name = folder apps/<service> in the config-repo (the name registered in the portal)"
+        type: string
+        required: true
+      image_name:
+        description: "Image name under ghcr.io/<owner>/ (default: the service name)"
+        type: string
+        default: ""
+      config_repo:
+        description: "owner/name of the config-repo (default: <owner>/NT548-config-repo)"
+        type: string
+        default: ""
+      context:
+        description: "Docker build context"
+        type: string
+        default: "."
+      dockerfile:
+        description: "Dockerfile path relative to the context"
+        type: string
+        default: "Dockerfile"
+      test_command:
+        description: "Shell command that runs the tests, including installing dependencies (empty = no test job)"
+        type: string
+        default: ""
+      port:
+        description: "Port the container listens on (smoke test)"
+        type: number
+        default: 8080
+      health_path:
+        description: "HTTP path that answers 200 when the service is up (smoke test)"
+        type: string
+        default: "/"
+      smoke_test:
+        description: "Start the container and call health_path before pushing"
+        type: boolean
+        default: true
+      deploy:
+        description: "Update the image tag in the config-repo after pushing (default branch only)"
+        type: boolean
+        default: true
+    secrets:
+      CONFIG_REPO_TOKEN:
+        required: false
+    outputs:
+      image:
+        description: "Image repository that was pushed"
+        value: ${{ jobs.build.outputs.image }}
+      tag:
+        description: "Image tag that was pushed"
+        value: ${{ jobs.build.outputs.tag }}
+
+jobs:
+  test:
+    if: ${{ inputs.test_command != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        env:
+          TEST_COMMAND: ${{ inputs.test_command }}
+        run: bash -eo pipefail -c "$TEST_COMMAND"
+
+  build:
+    needs: test
+    if: ${{ !cancelled() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate the service name and compute the image reference
+        id: meta
+        env:
+          SERVICE: ${{ inputs.service }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+        run: |
+          if ! [[ "$SERVICE" =~ ^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$ ]]; then
+            echo "::error::service '$SERVICE' is not a valid name (1-40 chars: a-z, 0-9, '-', starting with a letter)"
+            exit 1
+          fi
+          OWNER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          NAME="${IMAGE_NAME:-$SERVICE}"
+          echo "image=ghcr.io/$OWNER/$NAME" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          CONTEXT: ${{ inputs.context }}
+          DOCKERFILE: ${{ inputs.dockerfile }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f "$CONTEXT/$DOCKERFILE" -t "$IMAGE:$TAG" "$CONTEXT"
+
+      - name: Guardrail - the image must not run as root
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          IMAGE_USER=$(docker inspect --format '{{.Config.User}}' "$IMAGE:$TAG")
+          echo "user baked into the image: '${IMAGE_USER:-<none: runs as root>}'"
+          case "${IMAGE_USER%%:*}" in
+            ""|0|root)
+              echo "::error::the image runs as root. Add 'USER 10001' (a numeric non-root user) to the Dockerfile."
+              exit 1 ;;
+          esac
+
+      - name: Smoke test - the container starts and answers
+        if: ${{ inputs.smoke_test }}
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          PORT: ${{ inputs.port }}
+          HEALTH_PATH: ${{ inputs.health_path }}
+        run: |
+          docker run -d --name smoke -p "$PORT:$PORT" "$IMAGE:$TAG"
+          trap 'docker logs smoke; docker rm -f smoke' EXIT
+          for i in $(seq 1 30); do
+            curl -fs "http://localhost:$PORT$HEALTH_PATH" > /dev/null && break
+            sleep 1
+          done
+          curl -fs "http://localhost:$PORT$HEALTH_PATH" > /dev/null
+
+      # Pinned to a commit: the tags of this action were force-pushed in the March 2026 supply-chain incident.
+      - name: Trivy scan (fails on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Log in to GHCR
+        if: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker push "$IMAGE:$TAG"
+          {
+            echo "### Image pushed"
+            echo '```'
+            echo "$IMAGE:$TAG"
+            echo '```'
+            echo "A new GHCR package is private: set it to **Public** once (profile > Packages > ${IMAGE##*/} > Package settings > Change visibility)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: build
+    if: ${{ inputs.deploy && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ inputs.service }}
+      cancel-in-progress: false
+    steps:
+      - name: Check the deploy token
+        env:
+          TOKEN: ${{ secrets.CONFIG_REPO_TOKEN }}
+        run: |
+          test -n "$TOKEN" || { echo "::error::secret CONFIG_REPO_TOKEN is missing (Contents read/write on the config-repo)"; exit 1; }
+
+      - name: Check out the config-repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.config_repo || format('{0}/NT548-config-repo', github.repository_owner) }}
+          token: ${{ secrets.CONFIG_REPO_TOKEN }}
+          path: config-repo
+
+      - name: Point the service at the new image
+        env:
+          SERVICE: ${{ inputs.service }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          cd config-repo
+          f="apps/$SERVICE/values.yaml"
+          if [ ! -f "$f" ]; then
+            echo "::warning::$f does not exist: the service is not registered yet."
+            {
+              echo "### Service '$SERVICE' is not registered yet"
+              echo "The image was pushed but nothing is deployed. Register the service in the portal with:"
+              echo '```'
+              echo "image repository: $IMAGE"
+              echo "image tag:        $TAG"
+              echo '```'
+              echo "Later pushes will update the tag automatically."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          sed -i -E "s|^(  repository: ).*|\1$IMAGE|; s|^(  tag: ).*|\1\"$TAG\"|" "$f"
+          if git diff --quiet; then
+            echo "tag is already $TAG, nothing to do"
+            exit 0
+          fi
+          git config user.name "service-ci"
+          git config user.email "service-ci@users.noreply.github.com"
+          git commit -am "ci($SERVICE): $TAG ($GITHUB_REPOSITORY@${GITHUB_SHA::7})"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 3
+          done
+          exit 1

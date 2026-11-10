@@ -7,4 +7,13 @@ probes:
   path: /healthz
 resources:
   requests: {cpu: 50m, memory: 128Mi}
-  limits: {cpu: 500m, memory: 384Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+env:
+  - name: PORTAL_REPO
+    value: QuanTran2510/NT548-config-repo
+  - name: GITHUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: portal-github
+        key: token
+        optional: true
