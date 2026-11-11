@@ -2,8 +2,8 @@
 service: realtime-chat
 site: us-east
 solver: ilp
-scenario: asia-launch
-replicaCount: 2
+scenario: night
+replicaCount: 1
 nodeSelector:
   region: us-east
 podLabels:
