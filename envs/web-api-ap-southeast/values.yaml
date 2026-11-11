@@ -2,8 +2,8 @@
 service: web-api
 site: ap-southeast
 solver: ilp
-scenario: asia-launch
-replicaCount: 4
+scenario: night
+replicaCount: 1
 nodeSelector:
   region: ap-southeast
 podLabels:

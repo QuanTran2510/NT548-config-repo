@@ -2,8 +2,8 @@
 service: realtime-chat
 site: eu-west
 solver: ilp
-scenario: asia-launch
-replicaCount: 2
+scenario: night
+replicaCount: 1
 nodeSelector:
   region: eu-west
 podLabels:
