@@ -1,7 +1,7 @@
 # Owned by CI: the deploy job rewrites repository and tag on every merge to main.
 image:
   repository: ghcr.io/quantran2510/placement-optimiser
-  tag: "3732439"
+  tag: "03ba4c8"
 containerPort: 8000
 probes:
   path: /healthz
