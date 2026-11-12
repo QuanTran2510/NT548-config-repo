@@ -1,0 +1,15 @@
+{
+  "name": "shop-cart",
+  "owner": "team-shop",
+  "slo_ms": 150,
+  "capacity": 120,
+  "mem_mi": 96,
+  "rps_per_active_user": 0.1,
+  "min_replicas": 2,
+  "image": {
+    "repository": "docker.io/nginxinc/nginx-unprivileged",
+    "tag": "1.27-alpine"
+  },
+  "port": 8080,
+  "health_path": "/"
+}
