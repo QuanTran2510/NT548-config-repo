@@ -2,8 +2,8 @@
 service: realtime-chat
 site: ap-southeast
 solver: ilp
-scenario: night
-replicaCount: 1
+scenario: asia-launch
+replicaCount: 4
 nodeSelector:
   region: ap-southeast
 podLabels:

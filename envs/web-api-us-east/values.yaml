@@ -2,7 +2,7 @@
 service: web-api
 site: us-east
 solver: ilp
-scenario: night
+scenario: asia-launch
 replicaCount: 1
 nodeSelector:
   region: us-east

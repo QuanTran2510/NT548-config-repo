@@ -2,8 +2,8 @@
 service: analytics
 site: eu-west
 solver: ilp
-scenario: night
-replicaCount: 2
+scenario: asia-launch
+replicaCount: 1
 nodeSelector:
   region: eu-west
 podLabels:
