@@ -1,0 +1,8 @@
+# Created by the portal for service 'voting-worker' (owner: team-voting).
+# The service team / its CI owns image.tag. Placement lives in envs/ and is written by the optimiser.
+image:
+  repository: ghcr.io/quantran2510/voting-result
+  tag: "v1"
+containerPort: 80
+probes:
+  path: /
