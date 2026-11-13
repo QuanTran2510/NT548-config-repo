@@ -6,3 +6,10 @@ image:
 containerPort: 80
 probes:
   path: /
+env:
+  - name: POSTGRES_HOST
+    value: "db.data-tier.svc.cluster.local"
+  - name: POSTGRES_USER
+    value: "postgres"
+  - name: POSTGRES_PASSWORD
+    value: "postgres"

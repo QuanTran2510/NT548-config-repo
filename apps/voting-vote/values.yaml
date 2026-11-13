@@ -6,3 +6,6 @@ image:
 containerPort: 80
 probes:
   path: /
+env:
+  - name: REDIS_HOST
+    value: "redis.data-tier.svc.cluster.local"

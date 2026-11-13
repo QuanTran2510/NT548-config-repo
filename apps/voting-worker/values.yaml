@@ -6,3 +6,8 @@ image:
 containerPort: 80
 probes:
   path: /
+env:
+  - name: REDIS_HOST
+    value: "redis.data-tier.svc.cluster.local"
+  - name: POSTGRES_HOST
+    value: "db.data-tier.svc.cluster.local"
