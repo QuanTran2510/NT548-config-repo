@@ -1,0 +1,15 @@
+{
+  "name": "voting-vote",
+  "owner": "team-voting",
+  "slo_ms": 150,
+  "capacity": 120,
+  "mem_mi": 128,
+  "rps_per_active_user": 0.1,
+  "min_replicas": 2,
+  "image": {
+    "repository": "ghcr.io/quantran2510/voting-vote",
+    "tag": "v1"
+  },
+  "port": 80,
+  "health_path": "/"
+}
